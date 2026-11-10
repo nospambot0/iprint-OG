@@ -12,31 +12,43 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@v5
+
       - name: Extract source
         shell: pwsh
-        run: Expand-Archive -Path OpenThermal-Windows-Source.zip -DestinationPath .
-      - uses: actions/setup-python@v5
+        run: |
+          Expand-Archive -Path OpenThermal-Windows-Source.zip -DestinationPath .
+          if (!(Test-Path 'main.py')) { throw 'main.py not found after extracting source archive.' }
+          if (!(Test-Path 'requirements.txt')) { throw 'requirements.txt not found after extracting source archive.' }
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           architecture: 'x64'
+
       - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r OpenThermal-Windows/requirements.txt
-          pip install 'bleak[winrt]>=0.22,<2' pyinstaller
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
       - name: Build standalone EXE
         shell: pwsh
         run: |
-          Set-Location OpenThermal-Windows
           pyinstaller --noconfirm --clean --onefile --windowed --name OpenThermal --collect-all bleak --collect-all winrt main.py
           if (!(Test-Path 'dist/OpenThermal.exe')) { throw 'OpenThermal.exe was not created.' }
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
           name: OpenThermal-Windows-x64
-          path: OpenThermal-Windows/dist/OpenThermal.exe
+          path: dist/OpenThermal.exe
           if-no-files-found: error
           retention-days: 30
+
       - name: Publish EXE as GitHub Release asset
         uses: softprops/action-gh-release@v2
         with:
@@ -48,4 +60,4 @@ jobs:
             BLE discovery, connection, GATT inspection and notification monitoring for SC03h/iPrint-family printers. Printing remains disabled pending exact firmware transfer-mode verification.
           prerelease: true
           make_latest: false
-          files: OpenThermal-Windows/dist/OpenThermal.exe
+          files: dist/OpenThermal.exe
