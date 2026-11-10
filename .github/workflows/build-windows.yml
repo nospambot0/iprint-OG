@@ -15,23 +15,24 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
-      - name: Extract source
-        shell: pwsh
-        run: |
-          Expand-Archive -Path OpenThermal-Windows-Source.zip -DestinationPath .
-          $project = Get-ChildItem -Path . -Directory -Recurse | Where-Object { (Test-Path (Join-Path $_.FullName 'main.py')) -and (Test-Path (Join-Path $_.FullName 'requirements.txt')) } | Select-Object -First 1
-          if (-not $project) {
-            Get-ChildItem -Path . -Recurse | Select-Object -ExpandProperty FullName
-            throw 'Could not locate extracted project folder containing main.py and requirements.txt.'
-          }
-          "PROJECT_DIR=$($project.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Found project at $($project.FullName)"
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           architecture: 'x64'
+
+      - name: Extract and verify source archive
+        shell: pwsh
+        run: |
+          python -c "import zipfile; z=zipfile.ZipFile('OpenThermal-Windows-Source.zip'); print('Archive entries:'); print('\n'.join(z.namelist())); z.extractall('source')"
+          $main = Get-ChildItem -Path source -Filter main.py -File -Recurse | Select-Object -First 1
+          $req = Get-ChildItem -Path source -Filter requirements.txt -File -Recurse | Select-Object -First 1
+          if (-not $main -or -not $req) {
+            Get-ChildItem -Path source -Recurse | Select-Object -ExpandProperty FullName
+            throw 'Archive does not contain both main.py and requirements.txt.'
+          }
+          "PROJECT_DIR=$($main.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Found application entry point at $($main.FullName)"
 
       - name: Install dependencies
         shell: pwsh
