@@ -1,6 +1,6 @@
 import sys, asyncio
 from PIL import Image
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QFileDialog
 from openthermal.image_pipeline import prepare_monochrome, raster_bytes_msb
 from PySide6.QtCore import Qt, QThread, Signal
@@ -108,7 +108,10 @@ class MainWindow(QMainWindow):
             with Image.open(path) as source:
                 prepared = prepare_monochrome(source, width=384)
                 packed = raster_bytes_msb(prepared)
-            pixmap = QPixmap(path)
+            gray = prepared.convert("L")
+            raw = gray.tobytes()
+            qimage = QImage(raw, gray.width, gray.height, gray.width, QImage.Format_Grayscale8).copy()
+            pixmap = QPixmap.fromImage(qimage)
             self.preview.setPixmap(pixmap.scaled(self.preview.width(), 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             self.image_path.setText(path)
             self.image_info.setText(f'{prepared.width()} × {prepared.height()} px • {len(packed):,} raw raster bytes • preview only')
