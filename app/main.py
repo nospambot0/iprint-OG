@@ -1,4 +1,8 @@
 import sys, asyncio
+from PIL import Image
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QFileDialog
+from openthermal.image_pipeline import prepare_monochrome, raster_bytes_msb
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QListWidget, QListWidgetItem, QTextEdit, QGroupBox, QSplitter,
@@ -86,9 +90,31 @@ class MainWindow(QMainWindow):
         row.addWidget(self.scan_btn); row.addWidget(self.connect_btn); row.addWidget(self.disconnect_btn); ll.addLayout(row)
         right=QWidget(); rl=QVBoxLayout(right); rl.addWidget(QLabel('Printer GATT services / characteristics'))
         self.service_log=QTextEdit(); self.service_log.setReadOnly(True); rl.addWidget(self.service_log)
-        rl.addWidget(QLabel('Printing is locked until the printer firmware transfer protocol is verified.'))
+        studio=QGroupBox('Image preparation — 384-dot preview'); sl=QVBoxLayout(studio)
+        file_row=QHBoxLayout(); self.image_path=QLabel('No image selected'); file_row.addWidget(self.image_path,1)
+        browse=QPushButton('Choose image'); browse.clicked.connect(self.choose_image); file_row.addWidget(browse); sl.addLayout(file_row)
+        self.preview=QLabel('Choose a PNG, JPG, BMP or WebP image'); self.preview.setAlignment(Qt.AlignCenter)
+        self.preview.setMinimumHeight(190); self.preview.setStyleSheet('background:white;color:#334155;border:1px dashed #64748b;padding:8px')
+        sl.addWidget(self.preview,1)
+        self.image_info=QLabel('Preview only — no printer data will be sent'); sl.addWidget(self.image_info)
+        rl.addWidget(studio,2)
+        rl.addWidget(QLabel('Printing remains locked until SC03h compression and BLE transfer sequence are confirmed.'))
         split.addWidget(left); split.addWidget(right); outer.addWidget(split); self.log=QTextEdit(); self.log.setReadOnly(True); self.log.setMaximumHeight(120); outer.addWidget(self.log)
         self.setCentralWidget(root); self.setStyleSheet('QMainWindow,QWidget{background:#11151c;color:#e8edf5;font-family:Segoe UI} QPushButton{background:#2767d8;color:white;padding:9px;border:0;border-radius:6px} QListWidget,QTextEdit{background:#171e28;color:#e8edf5;border:1px solid #394352;padding:6px}')
+    def choose_image(self):
+        path, _ = QFileDialog.getOpenFileName(self, 'Choose image', '', 'Images (*.png *.jpg *.jpeg *.bmp *.webp)')
+        if not path: return
+        try:
+            with Image.open(path) as source:
+                prepared = prepare_monochrome(source, width=384)
+                packed = raster_bytes_msb(prepared)
+            pixmap = QPixmap(path)
+            self.preview.setPixmap(pixmap.scaled(self.preview.width(), 360, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.image_path.setText(path)
+            self.image_info.setText(f'{prepared.width()} × {prepared.height()} px • {len(packed):,} raw raster bytes • preview only')
+            self.log_line(f'Image prepared: {prepared.width()} × {prepared.height()} px. No BLE print data sent.')
+        except Exception as exc:
+            QMessageBox.warning(self, 'Image error', str(exc))
     def show_devices(self,rows):
         self.device_list.clear()
         for d in rows:
