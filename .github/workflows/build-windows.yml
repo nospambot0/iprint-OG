@@ -19,8 +19,13 @@ jobs:
         shell: pwsh
         run: |
           Expand-Archive -Path OpenThermal-Windows-Source.zip -DestinationPath .
-          if (!(Test-Path 'main.py')) { throw 'main.py not found after extracting source archive.' }
-          if (!(Test-Path 'requirements.txt')) { throw 'requirements.txt not found after extracting source archive.' }
+          $project = Get-ChildItem -Path . -Directory -Recurse | Where-Object { (Test-Path (Join-Path $_.FullName 'main.py')) -and (Test-Path (Join-Path $_.FullName 'requirements.txt')) } | Select-Object -First 1
+          if (-not $project) {
+            Get-ChildItem -Path . -Recurse | Select-Object -ExpandProperty FullName
+            throw 'Could not locate extracted project folder containing main.py and requirements.txt.'
+          }
+          "PROJECT_DIR=$($project.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Found project at $($project.FullName)"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -32,12 +37,13 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r "$env:PROJECT_DIR/requirements.txt"
           python -m pip install pyinstaller
 
       - name: Build standalone EXE
         shell: pwsh
         run: |
+          Set-Location "$env:PROJECT_DIR"
           pyinstaller --noconfirm --clean --onefile --windowed --name OpenThermal --collect-all bleak --collect-all winrt main.py
           if (!(Test-Path 'dist/OpenThermal.exe')) { throw 'OpenThermal.exe was not created.' }
 
@@ -45,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OpenThermal-Windows-x64
-          path: dist/OpenThermal.exe
+          path: ${{ env.PROJECT_DIR }}/dist/OpenThermal.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -60,4 +66,4 @@ jobs:
             BLE discovery, connection, GATT inspection and notification monitoring for SC03h/iPrint-family printers. Printing remains disabled pending exact firmware transfer-mode verification.
           prerelease: true
           make_latest: false
-          files: dist/OpenThermal.exe
+          files: ${{ env.PROJECT_DIR }}/dist/OpenThermal.exe
