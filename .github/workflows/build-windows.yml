@@ -21,38 +21,32 @@ jobs:
           python-version: '3.11'
           architecture: 'x64'
 
-      - name: Extract and verify source archive
+      - name: Verify clean source files
         shell: pwsh
         run: |
-          python -c "import zipfile; z=zipfile.ZipFile('OpenThermal-Windows-Source.zip'); print('Archive entries:'); print('\n'.join(z.namelist())); z.extractall('source')"
-          $main = Get-ChildItem -Path source -Filter main.py -File -Recurse | Select-Object -First 1
-          $req = Get-ChildItem -Path source -Filter requirements.txt -File -Recurse | Select-Object -First 1
-          if (-not $main -or -not $req) {
-            Get-ChildItem -Path source -Recurse | Select-Object -ExpandProperty FullName
-            throw 'Archive does not contain both main.py and requirements.txt.'
-          }
-          "PROJECT_DIR=$($main.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Found application entry point at $($main.FullName)"
+          if (!(Test-Path 'app/main.py')) { throw 'app/main.py is missing.' }
+          if (!(Test-Path 'app/requirements.txt')) { throw 'app/requirements.txt is missing.' }
+          python -m py_compile app/main.py
 
       - name: Install dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r "$env:PROJECT_DIR/requirements.txt"
+          python -m pip install -r app/requirements.txt
           python -m pip install pyinstaller
 
       - name: Build standalone EXE
         shell: pwsh
         run: |
-          Set-Location "$env:PROJECT_DIR"
-          pyinstaller --noconfirm --clean --onefile --windowed --name OpenThermal --collect-all bleak --collect-all winrt main.py
+          Set-Location app
+          pyinstaller --noconfirm --clean --onefile --windowed --name OpenThermal --collect-all PySide6 --collect-all bleak main.py
           if (!(Test-Path 'dist/OpenThermal.exe')) { throw 'OpenThermal.exe was not created.' }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenThermal-Windows-x64
-          path: ${{ env.PROJECT_DIR }}/dist/OpenThermal.exe
+          path: app/dist/OpenThermal.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -62,9 +56,8 @@ jobs:
           tag_name: windows-build-${{ github.run_number }}
           name: OpenThermal Windows build ${{ github.run_number }}
           body: |
-            Standalone Windows x64 executable built from `${{ github.sha }}`.
-
-            BLE discovery, connection, GATT inspection and notification monitoring for SC03h/iPrint-family printers. Printing remains disabled pending exact firmware transfer-mode verification.
+            Windows x64 OpenThermal BLE discovery and GATT inspection application.
+            Printing remains disabled pending verification of the printer's firmware transfer protocol.
           prerelease: true
           make_latest: false
-          files: ${{ env.PROJECT_DIR }}/dist/OpenThermal.exe
+          files: app/dist/OpenThermal.exe
