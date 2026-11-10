@@ -22,3 +22,13 @@ pip install -r requirements.txt pyinstaller
 pyinstaller --noconfirm --clean --onefile --windowed --name OpenThermal --collect-all PySide6 --collect-all bleak main.py
 ```
 Output: `dist\OpenThermal.exe`.
+
+
+## Image preparation
+- Load PNG/JPEG/BMP/WebP images in the Windows app.
+- Convert to a 384-dot-wide monochrome preview with aspect ratio preserved.
+- Dither and pad raster height to an 8-pixel boundary.
+- The preview's packed bytes are diagnostic only; they are **not** the SC03h proprietary compressed BLE payload.
+
+## Printing status
+Print transmission remains disabled until the SC03h new-format compression and exact BLE transfer sequence are verified. The 384-dot preview is not proof of print compatibility.
